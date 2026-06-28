@@ -1,11 +1,25 @@
-import { useState, useEffect, useCallback } from "react";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CocoNova — Business Manager</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+  input, select, button { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback } = React;
 
 // ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
-// Palette: deep cocoa (#1C0F0A), warm cream (#FDF6EC), caramel gold (#C8883A),
-//          soft blush (#F2D4B6), slate text (#4A3728), success green (#4CAF82)
-// Type: system serif for display, system sans for body/data
-// Signature: animated "drip" accent on active nav items + caramel underline headers
-
 const COLORS = {
   bg: "#FDF6EC",
   surface: "#FFFFFF",
@@ -43,7 +57,6 @@ const INITIAL_INGREDIENTS = [
   { id: "i10", name: "Brown Sugar Syrup", unit: "ml", stock: 0, minStock: 200, costPer100: 0 },
 ];
 
-// Recipes: productId -> [{ingredientId, amountPer1Unit}]
 const INITIAL_RECIPES = {
   p1: [{ ingredientId: "i1", amount: 50 }, { ingredientId: "i2", amount: 40 }, { ingredientId: "i3", amount: 30 }, { ingredientId: "i4", amount: 60 }, { ingredientId: "i5", amount: 0.5 }],
   p2: [{ ingredientId: "i1", amount: 45 }, { ingredientId: "i2", amount: 55 }, { ingredientId: "i3", amount: 35 }, { ingredientId: "i4", amount: 55 }, { ingredientId: "i5", amount: 0.5 }, { ingredientId: "i6", amount: 15 }],
@@ -53,28 +66,28 @@ const INITIAL_RECIPES = {
   p6: [{ ingredientId: "i7", amount: 40 }, { ingredientId: "i8", amount: 8 }, { ingredientId: "i9", amount: 130 }, { ingredientId: "i10", amount: 30 }],
 };
 
-// ─── PERSISTENT STORAGE HELPERS ──────────────────────────────────────────────
-// Uses window.storage (persists across sessions) with sessionStorage fallback
-const STORE_KEYS = ["products", "ingredients", "recipes", "orders", "expenses", "customers"];
+// ─── LOCAL STORAGE PERSISTENCE (works on GitHub Pages, per-browser) ─────────
+const STORE_PREFIX = "coconova_";
 
-const persistLoad = async (key, fallback) => {
+function persistLoad(key, fallback) {
   try {
-    const result = await window.storage.get("coconova_" + key);
-    if (result && result.value != null) return JSON.parse(result.value);
-  } catch {}
-  // fallback to sessionStorage
-  try {
-    const local = sessionStorage.getItem("coconova_" + key);
-    if (local) return JSON.parse(local);
-  } catch {}
+    const raw = localStorage.getItem(STORE_PREFIX + key);
+    if (raw) return JSON.parse(raw);
+  } catch (err) {
+    console.error("Load failed for", key, err);
+  }
   return fallback;
-};
+}
 
-const persistSave = async (key, val) => {
-  const serialized = JSON.stringify(val);
-  try { await window.storage.set("coconova_" + key, serialized); } catch {}
-  try { sessionStorage.setItem("coconova_" + key, serialized); } catch {}
-};
+function persistSave(key, val) {
+  try {
+    localStorage.setItem(STORE_PREFIX + key, JSON.stringify(val));
+    return true;
+  } catch (err) {
+    console.error("Save failed for", key, err);
+    return false;
+  }
+}
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
 const Icon = ({ name, size = 18, color = "currentColor" }) => {
@@ -102,10 +115,10 @@ const today = () => new Date().toISOString().split("T")[0];
 const toDateStr = (d) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
-export default function CocoNova() {
+function CocoNova() {
   const [tab, setTab] = useState("dashboard");
   const [loading, setLoading] = useState(true);
-  const [saveStatus, setSaveStatus] = useState("saved"); // "saved" | "saving"
+  const [saveStatus, setSaveStatus] = useState("saved");
   const [products, setProducts] = useState(INITIAL_PRODUCTS);
   const [ingredients, setIngredients] = useState(INITIAL_INGREDIENTS);
   const [recipes, setRecipes] = useState(INITIAL_RECIPES);
@@ -114,33 +127,20 @@ export default function CocoNova() {
   const [customers, setCustomers] = useState([]);
   const [toast, setToast] = useState(null);
 
-  // Load all data from persistent storage on mount
   useEffect(() => {
-    (async () => {
-      try {
-        const [p, i, r, o, e, c] = await Promise.all([
-          persistLoad("products", INITIAL_PRODUCTS),
-          persistLoad("ingredients", INITIAL_INGREDIENTS),
-          persistLoad("recipes", INITIAL_RECIPES),
-          persistLoad("orders", []),
-          persistLoad("expenses", []),
-          persistLoad("customers", []),
-        ]);
-        setProducts(p); setIngredients(i); setRecipes(r);
-        setOrders(o); setExpenses(e); setCustomers(c);
-      } catch (err) {
-        console.error("Failed to load data:", err);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    setProducts(persistLoad("products", INITIAL_PRODUCTS));
+    setIngredients(persistLoad("ingredients", INITIAL_INGREDIENTS));
+    setRecipes(persistLoad("recipes", INITIAL_RECIPES));
+    setOrders(persistLoad("orders", []));
+    setExpenses(persistLoad("expenses", []));
+    setCustomers(persistLoad("customers", []));
+    setLoading(false);
   }, []);
 
-  // Auto-save whenever data changes (skip during initial load)
-  const doSave = useCallback(async (key, val) => {
+  const doSave = useCallback((key, val) => {
     setSaveStatus("saving");
-    await persistSave(key, val);
-    setSaveStatus("saved");
+    persistSave(key, val);
+    setTimeout(() => setSaveStatus("saved"), 200);
   }, []);
 
   useEffect(() => { if (!loading) doSave("products", products); }, [products, loading]);
@@ -155,7 +155,6 @@ export default function CocoNova() {
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // Deduct ingredients when order is placed
   const deductIngredients = useCallback((items) => {
     setIngredients(prev => {
       const updated = [...prev];
@@ -172,7 +171,6 @@ export default function CocoNova() {
     });
   }, [recipes]);
 
-  // Calculate COGS for an order
   const calcOrderCOGS = useCallback((items) => {
     let total = 0;
     items.forEach(({ productId, qty }) => {
@@ -206,23 +204,18 @@ export default function CocoNova() {
   const pages = { dashboard: Dashboard, orders: Orders, products: Products, inventory: Inventory, recipes: Recipes, expenses: Expenses, customers: Customers, reports: Reports };
   const Page = pages[tab] || Dashboard;
 
-  // Loading screen
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", background: COLORS.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      <div style={{ minHeight: "100vh", background: COLORS.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🍫</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.caramel, marginBottom: 8 }}>CocoNova</div>
         <div style={{ color: COLORS.muted, fontSize: 14 }}>Loading your business data...</div>
-        <div style={{ marginTop: 24, width: 160, height: 4, background: COLORS.border, borderRadius: 2, overflow: "hidden" }}>
-          <div style={{ height: 4, background: COLORS.caramel, borderRadius: 2, width: "60%" }} />
-        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: COLORS.bg, fontFamily: "'Segoe UI', system-ui, sans-serif", color: COLORS.slate }}>
-      {/* Header */}
+    <div style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.slate }}>
       <header style={{ background: COLORS.deep, color: "#fff", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56, position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(28,15,10,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 22 }}>🍫</span>
@@ -244,12 +237,11 @@ export default function CocoNova() {
       </header>
 
       <div style={{ display: "flex", minHeight: "calc(100vh - 56px)" }}>
-        {/* Sidebar */}
         <nav style={{ width: 200, background: COLORS.surface, borderRight: `1px solid ${COLORS.border}`, padding: "16px 0", flexShrink: 0, position: "sticky", top: 56, height: "calc(100vh - 56px)", overflowY: "auto" }}>
           {navItems.map(({ id, label, icon }) => {
             const active = tab === id;
             return (
-              <button key={id} onClick={() => setTab(id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 20px", background: active ? `${COLORS.caramel}18` : "none", border: "none", borderLeft: `3px solid ${active ? COLORS.caramel : "transparent"}`, color: active ? COLORS.caramel : COLORS.slate, fontWeight: active ? 600 : 400, fontSize: 14, cursor: "pointer", textAlign: "left", transition: "all 0.15s" }}>
+              <button key={id} onClick={() => setTab(id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 20px", background: active ? `${COLORS.caramel}18` : "none", border: "none", borderLeft: `3px solid ${active ? COLORS.caramel : "transparent"}`, color: active ? COLORS.caramel : COLORS.slate, fontWeight: active ? 600 : 400, fontSize: 14, cursor: "pointer", textAlign: "left" }}>
                 <Icon name={icon} size={16} color={active ? COLORS.caramel : COLORS.muted} />
                 {label}
               </button>
@@ -257,7 +249,6 @@ export default function CocoNova() {
           })}
         </nav>
 
-        {/* Main */}
         <main style={{ flex: 1, padding: "28px 32px", overflowY: "auto" }}>
           <Page
             products={products} setProducts={setProducts}
@@ -274,7 +265,6 @@ export default function CocoNova() {
         </main>
       </div>
 
-      {/* Toast */}
       {toast && (
         <div style={{ position: "fixed", bottom: 24, right: 24, background: toast.type === "success" ? COLORS.success : COLORS.danger, color: "#fff", padding: "12px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, boxShadow: "0 4px 20px rgba(0,0,0,0.2)", zIndex: 999, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name={toast.type === "success" ? "check" : "alert"} size={16} color="#fff" />
@@ -285,7 +275,7 @@ export default function CocoNova() {
   );
 }
 
-// ─── CARD COMPONENT ──────────────────────────────────────────────────────────
+// ─── SHARED UI ───────────────────────────────────────────────────────────────
 function Card({ children, style = {} }) {
   return <div style={{ background: COLORS.surface, borderRadius: 14, padding: 24, border: `1px solid ${COLORS.border}`, ...style }}>{children}</div>;
 }
@@ -295,7 +285,7 @@ function SectionTitle({ children }) {
 }
 
 function Btn({ children, onClick, variant = "primary", size = "md", disabled = false, style = {} }) {
-  const base = { cursor: disabled ? "not-allowed" : "pointer", border: "none", borderRadius: 8, fontWeight: 600, transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: 6, opacity: disabled ? 0.5 : 1 };
+  const base = { cursor: disabled ? "not-allowed" : "pointer", border: "none", borderRadius: 8, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6, opacity: disabled ? 0.5 : 1 };
   const variants = {
     primary: { background: COLORS.caramel, color: "#fff", padding: size === "sm" ? "6px 14px" : "10px 20px", fontSize: size === "sm" ? 13 : 14 },
     secondary: { background: COLORS.blush, color: COLORS.slate, padding: size === "sm" ? "6px 14px" : "10px 20px", fontSize: size === "sm" ? 13 : 14 },
@@ -329,7 +319,6 @@ function Select({ label, value, onChange, children, style = {} }) {
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
 function Dashboard({ todayRevenue, todayProfit, todayOrders, lowStockItems, orders, products, expenses, setTab }) {
-  const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
   const pendingOrders = orders.filter(o => o.status === "pending");
   const topProducts = products.map(p => ({
     ...p,
@@ -337,9 +326,7 @@ function Dashboard({ todayRevenue, todayProfit, todayOrders, lowStockItems, orde
   })).sort((a, b) => b.sold - a.sold).slice(0, 3);
 
   const StatCard = ({ label, value, sub, icon, color, onClick }) => (
-    <div onClick={onClick} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "20px 22px", cursor: onClick ? "pointer" : "default", transition: "transform 0.15s", position: "relative", overflow: "hidden" }}
-      onMouseEnter={e => onClick && (e.currentTarget.style.transform = "translateY(-2px)")}
-      onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}>
+    <div onClick={onClick} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "20px 22px", cursor: onClick ? "pointer" : "default", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: 16, right: 16, background: `${color}22`, borderRadius: 10, padding: 8 }}>
         <Icon name={icon} size={18} color={color} />
       </div>
@@ -364,7 +351,6 @@ function Dashboard({ todayRevenue, todayProfit, todayOrders, lowStockItems, orde
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        {/* Today's Sales Detail */}
         <Card>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: COLORS.deep }}>Today's Orders</h3>
           {todayOrders.length === 0 ? (
@@ -390,7 +376,6 @@ function Dashboard({ todayRevenue, todayProfit, todayOrders, lowStockItems, orde
           )}
         </Card>
 
-        {/* Top Products */}
         <Card>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: COLORS.deep }}>Best Sellers</h3>
           {topProducts.filter(p => p.sold > 0).length === 0 ? (
@@ -405,7 +390,7 @@ function Dashboard({ todayRevenue, todayProfit, todayOrders, lowStockItems, orde
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{p.name}</div>
                     <div style={{ height: 4, background: COLORS.border, borderRadius: 2, marginTop: 4 }}>
-                      <div style={{ height: 4, background: COLORS.caramel, borderRadius: 2, width: `${Math.min(100, (p.sold / (topProducts[0]?.sold || 1)) * 100)}%` }} />
+                      <div style={{ height: 4, background: COLORS.caramel, borderRadius: 2, width: `${Math.min(100, (p.sold / (topProducts[0] ? (topProducts[0].sold || 1) : 1)) * 100)}%` }} />
                     </div>
                   </div>
                   <div style={{ fontWeight: 700, color: COLORS.slate, fontSize: 14 }}>{p.sold}</div>
@@ -415,7 +400,6 @@ function Dashboard({ todayRevenue, todayProfit, todayOrders, lowStockItems, orde
           )}
         </Card>
 
-        {/* Low Stock */}
         {lowStockItems.length > 0 && (
           <Card style={{ gridColumn: "1 / -1" }}>
             <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: COLORS.danger, display: "flex", alignItems: "center", gap: 7 }}>
@@ -470,7 +454,6 @@ function Orders({ orders, setOrders, products, customers, setCustomers, deductIn
     const newOrder = { ...form, id: "o" + Date.now(), total: orderTotal, cogs, status: "pending", createdAt: new Date().toISOString() };
     setOrders(o => [newOrder, ...o]);
     deductIngredients(form.items);
-    // Upsert customer
     setCustomers(prev => {
       const idx = prev.findIndex(c => c.phone === form.customerPhone && form.customerPhone);
       if (idx >= 0) {
@@ -576,7 +559,7 @@ function Orders({ orders, setOrders, products, customers, setCustomers, deductIn
                     {o.status === "pending" && <Btn size="sm" variant="secondary" onClick={() => updateStatus(o.id, "preparing")}>Preparing</Btn>}
                     {o.status === "preparing" && <Btn size="sm" onClick={() => updateStatus(o.id, "done")}><Icon name="check" size={12} color="#fff" />Done</Btn>}
                     {o.status !== "done" && o.status !== "cancelled" && <Btn size="sm" variant="ghost" onClick={() => updateStatus(o.id, "cancelled")}>Cancel</Btn>}
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20, alignSelf: "center", background: o.status === "done" ? `${COLORS.success}22` : o.status === "cancelled" ? `${COLORS.danger}22` : o.status === "preparing" ? `${COLORS.warning}22` : `${"#6C63FF"}22`, color: o.status === "done" ? COLORS.success : o.status === "cancelled" ? COLORS.danger : o.status === "preparing" ? COLORS.warning : "#6C63FF" }}>{o.status}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20, alignSelf: "center", background: o.status === "done" ? `${COLORS.success}22` : o.status === "cancelled" ? `${COLORS.danger}22` : o.status === "preparing" ? `${COLORS.warning}22` : `#6C63FF22`, color: o.status === "done" ? COLORS.success : o.status === "cancelled" ? COLORS.danger : o.status === "preparing" ? COLORS.warning : "#6C63FF" }}>{o.status}</span>
                   </div>
                 </div>
               </div>
@@ -751,7 +734,7 @@ function Inventory({ ingredients, setIngredients, showToast }) {
                     {ing.costPer100 > 0 && <span style={{ color: COLORS.muted }}>Cost: {fmt(ing.costPer100)} SAR/100{ing.unit}</span>}
                   </div>
                   <div style={{ marginTop: 8, height: 5, background: COLORS.border, borderRadius: 3, width: "60%" }}>
-                    <div style={{ height: 5, background: isLow ? COLORS.danger : COLORS.success, borderRadius: 3, width: `${pct}%`, transition: "width 0.3s" }} />
+                    <div style={{ height: 5, background: isLow ? COLORS.danger : COLORS.success, borderRadius: 3, width: `${pct}%` }} />
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -777,7 +760,7 @@ function Inventory({ ingredients, setIngredients, showToast }) {
 
 // ─── RECIPES ─────────────────────────────────────────────────────────────────
 function Recipes({ products, ingredients, recipes, setRecipes, showToast }) {
-  const [selectedProduct, setSelectedProduct] = useState(products[0]?.id || "");
+  const [selectedProduct, setSelectedProduct] = useState(products[0] ? products[0].id : "");
   const [ingId, setIngId] = useState("");
   const [amount, setAmount] = useState("");
 
@@ -827,8 +810,8 @@ function Recipes({ products, ingredients, recipes, setRecipes, showToast }) {
 
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{selectedP?.name}</h3>
-            {selectedP?.price > 0 && (
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{selectedP ? selectedP.name : ""}</h3>
+            {selectedP && selectedP.price > 0 && (
               <div style={{ fontSize: 13, color: COLORS.muted }}>
                 Cost: <strong style={{ color: COLORS.danger }}>{fmt(calcCost())} SAR</strong> · Profit: <strong style={{ color: COLORS.success }}>{fmt(selectedP.price - calcCost())} SAR</strong>
               </div>
@@ -953,7 +936,7 @@ function Expenses({ expenses, setExpenses, showToast }) {
 }
 
 // ─── CUSTOMERS ───────────────────────────────────────────────────────────────
-function Customers({ customers, orders, showToast }) {
+function Customers({ customers, orders }) {
   const [search, setSearch] = useState("");
   const filtered = customers.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || (c.phone || "").includes(search));
 
@@ -969,35 +952,32 @@ function Customers({ customers, orders, showToast }) {
         </Card>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-          {filtered.map(c => {
-            const customerOrders = orders.filter(o => o.customerName === c.name);
-            return (
-              <Card key={c.id} style={{ padding: "16px 18px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 15, color: COLORS.deep }}>{c.name}</div>
-                    {c.phone && <div style={{ fontSize: 12, color: COLORS.muted }}>{c.phone}</div>}
-                    <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>Since {toDateStr(c.joinedDate)}</div>
-                  </div>
-                  {c.totalOrders >= 3 && <span style={{ fontSize: 10, fontWeight: 700, background: `${COLORS.caramel}22`, color: COLORS.caramel, padding: "3px 8px", borderRadius: 20 }}>⭐ Regular</span>}
+          {filtered.map(c => (
+            <Card key={c.id} style={{ padding: "16px 18px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: COLORS.deep }}>{c.name}</div>
+                  {c.phone && <div style={{ fontSize: 12, color: COLORS.muted }}>{c.phone}</div>}
+                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>Since {toDateStr(c.joinedDate)}</div>
                 </div>
-                <div style={{ display: "flex", gap: 16, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.caramel }}>{c.totalOrders}</div>
-                    <div style={{ fontSize: 10, color: COLORS.muted }}>Orders</div>
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.success }}>{fmt(c.totalSpent)}</div>
-                    <div style={{ fontSize: 10, color: COLORS.muted }}>SAR Spent</div>
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.slate }}>{toDateStr(c.lastOrder)}</div>
-                    <div style={{ fontSize: 10, color: COLORS.muted }}>Last Order</div>
-                  </div>
+                {c.totalOrders >= 3 && <span style={{ fontSize: 10, fontWeight: 700, background: `${COLORS.caramel}22`, color: COLORS.caramel, padding: "3px 8px", borderRadius: 20 }}>⭐ Regular</span>}
+              </div>
+              <div style={{ display: "flex", gap: 16, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.caramel }}>{c.totalOrders}</div>
+                  <div style={{ fontSize: 10, color: COLORS.muted }}>Orders</div>
                 </div>
-              </Card>
-            );
-          })}
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.success }}>{fmt(c.totalSpent)}</div>
+                  <div style={{ fontSize: 10, color: COLORS.muted }}>SAR Spent</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.slate }}>{toDateStr(c.lastOrder)}</div>
+                  <div style={{ fontSize: 10, color: COLORS.muted }}>Last Order</div>
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
     </div>
@@ -1005,7 +985,7 @@ function Customers({ customers, orders, showToast }) {
 }
 
 // ─── REPORTS ─────────────────────────────────────────────────────────────────
-function Reports({ orders, expenses, products, ingredients }) {
+function Reports({ orders, expenses, products }) {
   const [range, setRange] = useState("week");
 
   const now = new Date();
@@ -1116,3 +1096,10 @@ function Reports({ orders, expenses, products, ingredients }) {
     </div>
   );
 }
+
+// ─── MOUNT ───────────────────────────────────────────────────────────────────
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<CocoNova />);
+</script>
+</body>
+</html>
